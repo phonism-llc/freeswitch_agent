@@ -4,7 +4,7 @@
 # Licensed under BSD 3-Clause "New" or "Revised" License (see LICENSE)
 
 # Run with:
-# PH_API_KEY=ApiKey PH_ENDPOINT=https://app.phonism.com/api/v2/ sudo -E bash -c "$(curl -L https://raw.githubusercontent.com/phonism-llc/freeswitch_agent/master/install.sh)"
+# PH_API_KEY=ApiKey PH_ENDPOINT=https://app.phonism.com/api/v2/ sudo -E bash -c "$(wget -qO- https://raw.githubusercontent.com/phonism-llc/freeswitch_agent/master/install.sh)"
 
 # Environment Variables 
 if [ -n "$PH_API_KEY" ]; then
@@ -239,16 +239,32 @@ msg_green "✔ Settings stored to: $FILE" && nl
 
 nl && msg_bold "Downloading script..." && nl
 
-CURL_STATUS=$(curl -s -w %{http_code} -o "phonism_freeswitch_agent.py" "${DOWNLOAD_HOST}/phonism_freeswitch_agent.py")
+if [ $(command -v curl) ]; then
 
-if [ $CURL_STATUS == "200" ]; then
-    msg_green "✔ Script downloaded to $DIR_INSTALL" && nl
+    CURL_STATUS=$(curl -s -w %{http_code} -o "phonism_freeswitch_agent.py" "${DOWNLOAD_HOST}/phonism_freeswitch_agent.py")
+
+    if [ $CURL_STATUS == "200" ]; then
+        msg_green "✔ Script downloaded to $DIR_INSTALL" && nl
+    else
+        msg_red "✘ Script could not be downloaded (Error $CURL_STATUS)." && nl && nl
+        msg_red "Exiting, nothing has been installed." && nl
+        cleanup_and_exit 1
+    fi
+
 else
-    msg_red "✘ Script could not be downloaded (Error $CURL_STATUS)." && nl && nl
-    msg_red "Exiting, nothing has been installed." && nl
-    cleanup_and_exit 1
-fi
 
+    WGET_STATUS=$(wget --spider -S "${DOWNLOAD_HOST}/phonism_freeswitch_agent.py" 2>&1 | grep "HTTP/" | awk '{print $2}' )
+
+    if [ $WGET_STATUS == "200" ]; then
+        WGET_RUN=$(wget "${DOWNLOAD_HOST}/phonism_freeswitch_agent.py" -O "$DIR_INSTALL/phonism_freeswitch_agent.py" )
+        msg_green "✔ Script downloaded to $DIR_INSTALL" && nl
+    else
+        msg_red "✘ Script could not be downloaded (Error $CURL_STATUS)." && nl && nl
+        msg_red "Exiting, nothing has been installed." && nl
+        cleanup_and_exit 1
+    fi
+
+fi
 
 ## Test run script
 
