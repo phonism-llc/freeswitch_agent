@@ -95,15 +95,15 @@ else
 fi
 
 msg_bold "- Python "
-if ! [ -x "$(command -v python)" ]; then
-    msg_red "✘ python is not installed" && nl
+if ! [ -x "$(command -v python3)" ]; then
+    msg_red "✘ python3 is not installed" && nl
     ERROR_FLAG=1
 else
-    PYTHON_VERSION=$(python -V 2>&1 | awk '{ print $2 }' )
+    PYTHON_VERSION=$(python3 -V 2>&1 | awk '{ print $2 }' )
     PYTHON_VERSION_REQUIRED="3.4.0"
     if [ "$(printf '%s\n' "$PYTHON_VERSION_REQUIRED" "$PYTHON_VERSION" | sort -V | head -n1)" = "$PYTHON_VERSION_REQUIRED" ]; then 
         msg_green "✔ v${PYTHON_VERSION} is installed" && nl
-        PATH_TO_PYTHON=$(which python)
+        PATH_TO_PYTHON=$(which python3)
     else
         msg_red "✘ v${PYTHON_VERSION_REQUIRED} is required, v${PYTHON_VERSION} is installed" && nl
         nl && msg_bold "To install Python 3, run: " && nl
@@ -160,7 +160,7 @@ pip3 install requests
 deactivate
 
 # store path to python virtual environment
-PATH_TO_PYTHON_ENV="${DIR_INSTALL}/phonism_env/bin/python"
+PATH_TO_PYTHON_ENV="${DIR_INSTALL}/phonism_env/bin/python3"
 
 
 ## Check Python dependencies to make sure above worked as expected
