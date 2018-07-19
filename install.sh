@@ -117,7 +117,7 @@ fi
 #  This is done twice, once at this point for Python and 
 #  again later to check Python's dependencies
 
-if [ ERROR_FLAG ]; then
+if [[ ERROR_FLAG -eq 1 ]]; then
     nl && msg_red "Correct missing or out-of-date dependencies reported above." && nl
     msg_red "Exiting, nothing has been installed." && nl
     cleanup_and_exit 1
@@ -148,7 +148,7 @@ mkdir -p $DIR_INSTALL
 cd $DIR_INSTALL
 
 # create our virtual environment to avoid polluting target machine's python global environment
-virtualenv -p python3 "phonism_env"
+python3 -m virtualenv -p python3 "phonism_env"
 
 # switch to our virtual environment 
 source "$DIR_INSTALL/phonism_env/bin/activate"
@@ -161,7 +161,6 @@ deactivate
 
 # store path to python virtual environment
 PATH_TO_PYTHON_ENV="${DIR_INSTALL}/phonism_env/bin/python3"
-
 
 ## Check Python dependencies to make sure above worked as expected
 #  This is done twice, earlier for high-level dependencies and 
@@ -178,7 +177,7 @@ else
 fi
 
 msg_bold "- Python virtualenv "
-if ! [ -x "$(command -v virtualenv)" ]; then
+if ! [ -x "$(command -v $PATH_TO_PYTHON_ENV)" ]; then
     msg_red "✘ virtualenv is not installed or not executable" && nl
     nl && msg_bold "To install Python virtualenv, run: " && nl
     nl && echo -ne "  sudo apt-get install python3-virtualenv" && nl
@@ -190,7 +189,7 @@ fi
 
 ## Exit if dependencies are insufficient
 
-if [ ERROR_FLAG ]; then
+if [[ ERROR_FLAG -eq 1 ]]; then
     nl && msg_red "Correct missing or out-of-date dependencies reported above." && nl
     msg_red "Exiting, nothing has been installed." && nl
     cleanup_and_exit 1
@@ -229,8 +228,8 @@ chmod 0600 $FILE
 
 /bin/cat <<EOM >$FILE
 [phonism]
-api_key="${INPUT_API_KEY}"
-endpoint="${INPUT_ENDPOINT}"
+api_key=${INPUT_API_KEY}
+endpoint=${INPUT_ENDPOINT}
 EOM
 
 msg_green "✔ Settings stored to: $FILE" && nl
