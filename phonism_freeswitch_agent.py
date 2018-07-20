@@ -121,7 +121,7 @@ if __name__ == '__main__':
         print('')
 
     ## Get the Phonism extension data
-    extensions_api_url = endpoint + 'extensions?tenant_id={0}'.format(tenant_id)
+    extensions_api_url = endpoint + 'extensions?limit=100&tenant_id={0}'.format(tenant_id)
 
     if verbose > 2:
         print('extensions_api_url: ', extensions_api_url)
