@@ -24,7 +24,7 @@ class VAction(argparse.Action):
         setattr(args, self.dest, values)
 
 ## Global Variables
-ini_file = './phonism_freeswitch_agent.ini'
+ini_file = '/opt/phonism/phonism_freeswitch_agent.ini'
 company_id = None
 tenant_id = None
 verbose = 0
