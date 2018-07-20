@@ -271,7 +271,7 @@ fi
 nl && msg_bold "Running script..." && nl
 
 TEST_RUN_OUTPUT=$(${PATH_TO_PYTHON_ENV} "${DIR_INSTALL}/phonism_freeswitch_agent.py")
-if [ TEST_RUN_OUTPUT == "" ]; then
+if [[ $? -eq 0 ]]; then
     msg_green "✔ Test Run successful" && nl
 else 
     msg_red "✘ Script test run failed. Check output for details:" && nl && nl
