@@ -207,35 +207,38 @@ if __name__ == '__main__':
     ## Change the headers for this section of the script.
     headers['Content-Type'] = 'application/x-www-form-urlencoded'
 
-    # The page number to request from the Phonism API.
-    page_num = 1 
-    # Conditional to keep the while loop going.       
-    keep_going = True  
-    # List of extensions not to create when we loop through the fs_user_list after the while loop.
+    limit = 2
+    start_after = 0
     updated_phonism_extensions = []
+    keep_going = True
 
     ## Keep requesting Phonism extension data until there is no more...
     while keep_going == True:
         ## Get Phonism extension data
-        extensions_api_url = endpoint + 'extensions?limit=2&page={0}&tenant_id={1}'.format(page_num, tenant_id)
+        extensions_api_url = endpoint + 'extensions?tenant_id={0}&limit={1}&start_after={2}'.format(tenant_id, limit, start_after)
 
-        if verbose > 2:
+        if True or verbose > 2:
             print('extensions_api_url: ', extensions_api_url)
+            print('limit:', limit)
+            print('start_after:', start_after)
+            print('updated_phonism_extensions:', updated_phonism_extensions)
+            print('')
 
         response = requests.get(extensions_api_url, headers=headers)
         phonism_extension_data = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='get')
 
-        if True or verbose > 1:
-            print('Extension data: ', end="\n")
+        if verbose > 1:
+            print('Extension data:', end="\n")
             pprint(phonism_extension_data, width=120)
             print('')
 
         try:
-            if len(phonism_extension_data) == 0:
+            count_of_users = len(phonism_extension_data)
+            if count_of_users == 0:
                 keep_going = False
                 break
         except (TypeError, ValueError):
-            print('Could not obtain phonism_extension_data... ', phonism_extension_data, sep="\n", end="\n\n", flush=True)
+            print('Could not obtain phonism_extension_data...', phonism_extension_data, sep="\n", end="\n\n", flush=True)
             sys.exit(1)
 
         ## Loop through phonism_extension_data and do stuff depending on whether you find it in fs_user_list
@@ -247,9 +250,9 @@ if __name__ == '__main__':
                     fs_user_found = True
                     found_fs_user_dict = dict(fs_user_dict)
 
-            if fs_user_found: 
+            if fs_user_found:
                 # If the Phonism extension is found in FreeSwitch, update it.    
-                
+
                 # Add the Phonism extension to the updated list so that it is not created.
                 updated_phonism_extensions.append(found_fs_user_dict['userid'])
 
@@ -267,10 +270,9 @@ if __name__ == '__main__':
                 response = requests.put(extensions_api_url, data=put_data, headers=headers)
                 updated_extension = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='put')
 
-                if verbose > 0:
+                if True or verbose > 0:
                     print("Updated extension \"{0}\" in Phonism.".format(updated_extension['extension']))
-
-            else: 
+            else:
                 # Else, delete the Phonism extension.
 
                 # Create the delete url
@@ -280,10 +282,15 @@ if __name__ == '__main__':
                 response = requests.delete(extensions_api_url, headers=headers)
                 deleted_extension = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='delete')
 
-                if verbose > 0:
+                if True or verbose > 0:
                     print("Deleted extension id #{0} from Phonism.".format(deleted_extension['id']))
 
-        page_no += 1 
+                # This user is deleted so we should count them for "start_after".
+                count_of_users -= 1
+
+        # Start after the number of users processed 
+        start_after += count_of_users
+        print('', sep="", end="\n\n", flush=True)
 
 
     ## Loop through fs_user_list and do stuff depending on whether you find it in phonism_extension_data
@@ -304,10 +311,10 @@ if __name__ == '__main__':
             response = requests.post(extensions_api_url, data=post_data, headers=headers)
             created_extension = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='post')
 
-            if verbose > 0:
+            if True or verbose > 0:
                 print("Created extension \"{0}\" in Phonism.".format(created_extension['extension']))
 
-    
+
 # Done! 
 sys.exit(0)
 
