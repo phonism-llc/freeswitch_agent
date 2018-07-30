@@ -62,7 +62,7 @@ def processRequestsResponse(response, request_url='', request_verb=''):
         if request_verb:
             print("Request verb: ", request_verb)
         print("Status Code: ",  response.status_code)
-        print("Response Content: ")
+        print("Response Content: ", sep="", end="\n")
         pprint(response_content, width=120, depth=10)
         print('')
         sys.exit(1)
@@ -113,9 +113,7 @@ if __name__ == '__main__':
         company_id = int(phonism_integration_data['company_id'])
     except (TypeError, ValueError, KeyError):
         print('There was no tenant_id in the response data.')
-        print('Please contact Phonism support for assistance.')
-        print("The response:")
-        print(phonism_integration_data)
+        print('The response data: ', phonism_integration_data, sep="\n", end="\n\n", flush=True)
         sys.exit(1)
 
     if verbose > 1:
@@ -123,13 +121,103 @@ if __name__ == '__main__':
         pprint(phonism_integration_data, width=120)
         print('')
 
-    ## This is where we 
+    ## Now get the FreeSwitch users, and parse them into a usable format.
+    cmd = 'fs_cli -x list_users'
+    fs_user_data = executeShellCmd(cmd=cmd)
+    fs_user_data = fs_user_data.split('\n')
 
-    page_no = 1
-    get_more_phonism_extensions = True
-    while get_more_phonism_extensions == True:
-        ## Get the Phonism extension data
-        extensions_api_url = endpoint + 'extensions?limit=2&tenant_id={0}&page={1}'.format(tenant_id, page_no)
+    ## Parse fs_user_data into a list of dictionaries
+    col_names = []
+    fs_user_list = []
+    for i, user_data_string in enumerate(fs_user_data):
+        user_data_string = user_data_string.strip()
+
+        if i == 0:
+            col_names = list(user_data_string.split('|'))
+            continue
+
+        if not col_names:
+            print('Could not obtain column names from the FreeSwitch data.')
+            sys.exit(1)
+
+        if not user_data_string:
+            continue
+
+        if user_data_string == '+OK':
+            continue
+
+        user_data_list = list(user_data_string.split('|'))
+
+        user_dict = {}
+        for j, col_name in enumerate(col_names):
+            try:
+                user_dict[col_name] = user_data_list[j]
+            except IndexError:
+                continue
+
+        fs_user_list.append(user_dict)
+
+    ## Now loop through fs_user_list and lookup the user's password and append it to the user_dict
+    for i, user_dict in enumerate(fs_user_list):
+        cmd = 'fs_cli -x "user_data {0}@{1} param password"'.format(user_dict['userid'], user_dict['domain'])
+        user_password = executeShellCmd(cmd=cmd)
+        if user_password:
+            user_dict['user_password'] = user_password.strip()
+
+    ## Group like fs user extension columns together.
+    processed = []
+    grouped_fs_user_list = []
+    for i, user_dict in enumerate(fs_user_list):
+        # Don't process the users in fs_user_list more than once.
+        if user_dict['userid'] in processed:
+            continue
+
+        # Find all matching users in fs_cli user list
+        similar_users = list(filter(lambda fs_user: fs_user['userid'] == user_dict['userid'], fs_user_list))
+
+        if len(similar_users) == 1:
+            # If there is only 1, append it to the grouped_fs_user_list
+            grouped_fs_user_list.append(similar_users[0])
+            processed.append(similar_users[0]['userid'])
+        elif len(similar_users) > 1:
+            # Else If, there is more than one, group the column values into lists.
+            grouped_user_dict = defaultdict(list)
+            for key, value in [(k, v) for udict in similar_users for (k, v) in udict.items()]:
+                if value not in list(grouped_user_dict[key]) :
+                    grouped_user_dict[key].append(value)
+
+            # Loop back through the grouped_user_dict and convert any list 
+            # that only has one element into a string. 
+            for key, value in grouped_user_dict.items():
+                if len(value) == 1:
+                    grouped_user_dict[key] = str(value[0])
+
+            # Append the grouped_user_dict to the grouped_fs_user_list
+            grouped_fs_user_list.append(grouped_user_dict)
+            processed.append(grouped_user_dict['userid'])
+
+    # Overwrite fs_user_list to be the grouped grouped_fs_user_list
+    fs_user_list = grouped_fs_user_list
+
+    if verbose > 1:
+        print('FreeSwitch users:')
+        pprint(fs_user_list, width=120)
+        print('')
+
+    ## Change the headers for this section of the script.
+    headers['Content-Type'] = 'application/x-www-form-urlencoded'
+
+    # The page number to request from the Phonism API.
+    page_num = 1 
+    # Conditional to keep the while loop going.       
+    keep_going = True  
+    # List of extensions not to create when we loop through the fs_user_list after the while loop.
+    updated_phonism_extensions = []
+
+    ## Keep requesting Phonism extension data until there is no more...
+    while keep_going == True:
+        ## Get Phonism extension data
+        extensions_api_url = endpoint + 'extensions?limit=2&page={0}&tenant_id={1}'.format(page_num, tenant_id)
 
         if verbose > 2:
             print('extensions_api_url: ', extensions_api_url)
@@ -138,161 +226,57 @@ if __name__ == '__main__':
         phonism_extension_data = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='get')
 
         if True or verbose > 1:
-            print('\nExtension data: ', sep="", end="\n")
+            print('Extension data: ', end="\n")
             pprint(phonism_extension_data, width=120)
             print('')
 
         try:
             if len(phonism_extension_data) == 0:
-                get_more_phonism_extensions = False
-                print('No more extensions to process!')
+                keep_going = False
                 break
         except (TypeError, ValueError):
-            print('\nCould not obtain phonism_extension_data... ', phonism_extension_data, sep="", end="\n\n", flush=True)
-            sys.exit(0)
+            print('Could not obtain phonism_extension_data... ', phonism_extension_data, sep="\n", end="\n\n", flush=True)
+            sys.exit(1)
 
-        ## Then get the FreeSwitch users
-        cmd = 'fs_cli -x list_users'
-        fs_user_data = executeShellCmd(cmd=cmd)
-        fs_user_data = fs_user_data.split('\n')
+        ## Loop through phonism_extension_data and do stuff depending on whether you find it in fs_user_list
+        for pi, ph_ext_dict in enumerate(phonism_extension_data):
+            fs_user_found = False
+            found_fs_user_dict = {}
+            for fi, fs_user_dict in enumerate(fs_user_list):
+                if str(fs_user_dict['userid']) == str(ph_ext_dict['extension']):
+                    fs_user_found = True
+                    found_fs_user_dict = dict(fs_user_dict)
 
-        ## Parse fs_user_data into a list of dictionaries
-        col_names = []
-        fs_user_list = []
-        for i, user_data_string in enumerate(fs_user_data):
-            user_data_string = user_data_string.strip()
+            if fs_user_found: 
+                # If the Phonism extension is found in FreeSwitch, update it.    
+                
+                # Add the Phonism extension to the updated list so that it is not created.
+                updated_phonism_extensions.append(found_fs_user_dict['userid'])
 
-            if i == 0:
-                col_names = list(user_data_string.split('|'))
-                continue
+                # Create the update url
+                extensions_api_url = endpoint + 'extensions/{0}'.format(ph_ext_dict['id'])
 
-            if not col_names:
-                print('Could not obtain column names from the FreeSwitch data.')
-                sys.exit(1)
-
-            if not user_data_string:
-                continue
-
-            if user_data_string == '+OK':
-                continue
-
-            user_data_list = list(user_data_string.split('|'))
-
-            user_dict = {}
-            for j, col_name in enumerate(col_names):
-                try:
-                    user_dict[col_name] = user_data_list[j]
-                except IndexError:
-                    continue
-
-            fs_user_list.append(user_dict)
-
-        ## Now loop through fs_user_list and lookup the user's password and append it to the user_dict
-        for i, user_dict in enumerate(fs_user_list):
-            cmd = 'fs_cli -x "user_data {0}@{1} param password"'.format(user_dict['userid'], user_dict['domain'])
-            user_password = executeShellCmd(cmd=cmd)
-            if user_password:
-                user_dict['user_password'] = user_password.strip()
-
-        ## Group like extensions together.
-        processed = []
-        grouped_fs_user_list = []
-        for i, user_dict in enumerate(fs_user_list):
-            if user_dict['userid'] in processed:
-                continue
-
-            # find all matching users in fs_cli user list
-            similar_users = list(filter(lambda fs_user: fs_user['userid'] == user_dict['userid'], fs_user_list))
-
-            if len(similar_users) == 1:
-                #  If there is only 1, append it to the grouped_fs_user_list
-                grouped_fs_user_list.append(similar_users[0])
-                processed.append(similar_users[0]['userid'])
-            elif len(similar_users) > 1:
-                # Else If, there is more than one, group the like items into lists.
-                grouped_user_dict = defaultdict(list)
-                for key, value in [(k, v) for udict in similar_users for (k, v) in udict.items()]:
-                    if value not in list(grouped_user_dict[key]) :
-                        grouped_user_dict[key].append(value)
-
-                # Loop back through the grouped_user_dict and convert any list 
-                # that only has one element to a string. 
-                for key, value in grouped_user_dict.items():
-                    if len(value) == 1:
-                        grouped_user_dict[key] = str(value[0])
-
-                # Append the grouped_user_dict to the grouped_fs_user_list
-                grouped_fs_user_list.append(grouped_user_dict)
-                processed.append(grouped_user_dict['userid'])
-
-        # Overwrite fs_user_list to be the grouped grouped_fs_user_list
-        fs_user_list = grouped_fs_user_list
-
-        if verbose > 1:
-            print('FreeSwitch users:')
-            pprint(fs_user_list, width=120)
-            print('')
-
-        ## Change the headers for this section of the script.
-        headers['Content-Type'] = 'application/x-www-form-urlencoded'
-
-        ## Loop through fs_user_list and do stuff depending on whether you find it in phonism_extension_data
-        for fi, user_dict in enumerate(fs_user_list):
-            ph_ext_found = False
-            found_ext_dict = {}
-            for pi, ext_dict in enumerate(phonism_extension_data):
-                if ext_dict['extension'] == user_dict['userid']:
-                    ph_ext_found = True
-                    found_ext_dict = dict(ext_dict)
-
-            if not ph_ext_found:
-                # If extension is in FreeSwitch but NOT in Phonism, add to Phonism
-                extensions_api_url = endpoint + 'extensions'
-
-                ext_post_data = {
+                # Update Data:
+                put_data = {
                     'tenant_id': tenant_id,
-                    'extension': user_dict['userid'],
-                    'secret': user_dict['user_password']
+                    'extension': found_fs_user_dict['userid'],
+                    'secret': found_fs_user_dict['user_password']
                 }
 
-                # Die on response error
-                response = requests.post(extensions_api_url, data=ext_post_data, headers=headers)
-                created_extension = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='post')
-
-                if verbose > 0:
-                    print("Created extension \"{0}\" in Phonism.".format(created_extension['extension']))
-            else:
-                # Else, update Phonism with the current values in FreeSwitch
-                if not found_ext_dict:
-                    print("Trying to update {0} in the Phonism database, but \"Phonism extension data\" is empty...")
-                    sys.exit(1)
-
-                extensions_api_url = endpoint + 'extensions/{0}'.format(found_ext_dict['id'])
-
-                ext_put_data = {
-                    'tenant_id': tenant_id,
-                    'extension': user_dict['userid'],
-                    'secret': user_dict['user_password']
-                }
-
-                # Die on response error
-                response = requests.put(extensions_api_url, data=ext_put_data, headers=headers)
+                # Make Http REST request. Die on response error.
+                response = requests.put(extensions_api_url, data=put_data, headers=headers)
                 updated_extension = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='put')
 
                 if verbose > 0:
                     print("Updated extension \"{0}\" in Phonism.".format(updated_extension['extension']))
 
-        ## Loop through phonism_extension_data and do stuff depending on whether you find it in fs_user_list
-        for pi, ext_dict in enumerate(phonism_extension_data):
-            fs_ext_found = False
-            for fi, user_dict in enumerate(fs_user_list):
-                if user_dict['userid'] == ext_dict['extension']:
-                    fs_ext_found = True
+            else: 
+                # Else, delete the Phonism extension.
 
-            if not fs_ext_found:
-                # If extension is missing from FreeSwitch but is in Phonism, delete from Phonism
-                extensions_api_url = endpoint + 'extensions/{0}'.format(ext_dict['id'])
+                # Create the delete url
+                extensions_api_url = endpoint + 'extensions/{0}'.format(ph_ext_dict['id'])
 
+                # Make Http REST request. Die on response error.
                 response = requests.delete(extensions_api_url, headers=headers)
                 deleted_extension = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='delete')
 
@@ -302,5 +286,28 @@ if __name__ == '__main__':
         page_no += 1 
 
 
-    sys.exit(0)
+    ## Loop through fs_user_list and do stuff depending on whether you find it in phonism_extension_data
+    for fi, fs_user_dict in enumerate(fs_user_list):
+        # If not in the updated_phonism_extensions list, create it.
+        if fs_user_dict['userid'] not in updated_phonism_extensions:
+            # Create the insert url.
+            extensions_api_url = endpoint + 'extensions'
+
+            # Insert Data:
+            post_data = {
+                'tenant_id': tenant_id,
+                'extension': fs_user_dict['userid'],
+                'secret': fs_user_dict['user_password']
+            }
+
+            # Make Http REST request. Die on response error.
+            response = requests.post(extensions_api_url, data=post_data, headers=headers)
+            created_extension = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='post')
+
+            if verbose > 0:
+                print("Created extension \"{0}\" in Phonism.".format(created_extension['extension']))
+
+    
+# Done! 
+sys.exit(0)
 
