@@ -299,7 +299,7 @@ if __name__ == '__main__':
                 if verbose > 0:
                     print("Deleted extension id #{0} from Phonism.".format(deleted_extension['id']))
 
-        page_no++
+        page_no += 1 
 
 
     sys.exit(0)
