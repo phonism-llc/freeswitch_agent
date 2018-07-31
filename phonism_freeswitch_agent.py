@@ -207,13 +207,17 @@ if __name__ == '__main__':
     ## Change the headers for this section of the script.
     headers['Content-Type'] = 'application/x-www-form-urlencoded'
 
-    limit = 2
+    # Limit (Take) 
+    limit = 10
+    # Offset (Skip) 
     start_after = 0
+    # List of Phonism extensions not to create in the for loop after this while loop.
     updated_phonism_extensions = []
-    keep_going = True
+    # Loop counter for fail safe
+    counter = 0
 
     ## Keep requesting Phonism extension data until there is no more...
-    while keep_going == True:
+    while True:
         ## Get Phonism extension data
         extensions_api_url = endpoint + 'extensions?tenant_id={0}&limit={1}&start_after={2}'.format(tenant_id, limit, start_after)
 
@@ -233,12 +237,12 @@ if __name__ == '__main__':
             print('')
 
         try:
-            count_of_users = len(phonism_extension_data)
-            if count_of_users == 0:
-                keep_going = False
-                break
+            # Break the while loop if ph_extension_count == 0
+            ph_extension_count = len(phonism_extension_data)
+            if ph_extension_count == 0:
+                break # Break While loop
         except (TypeError, ValueError):
-            print('Could not obtain phonism_extension_data...', phonism_extension_data, sep="\n", end="\n\n", flush=True)
+            print('Could not obtain phonism_extension_data.', phonism_extension_data, sep="\n", end="\n\n", flush=True)
             sys.exit(1)
 
         ## Loop through phonism_extension_data and do stuff depending on whether you find it in fs_user_list
@@ -250,9 +254,8 @@ if __name__ == '__main__':
                     fs_user_found = True
                     found_fs_user_dict = dict(fs_user_dict)
 
-            if fs_user_found:
-                # If the Phonism extension is found in FreeSwitch, update it.    
-
+            if fs_user_found: # If the Phonism extension is found in FreeSwitch, update it. 
+                   
                 # Add the Phonism extension to the updated list so that it is not created.
                 updated_phonism_extensions.append(found_fs_user_dict['userid'])
 
@@ -270,10 +273,10 @@ if __name__ == '__main__':
                 response = requests.put(extensions_api_url, data=put_data, headers=headers)
                 updated_extension = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='put')
 
-                if True or verbose > 0:
+                if verbose > 0:
                     print("Updated extension \"{0}\" in Phonism.".format(updated_extension['extension']))
-            else:
-                # Else, delete the Phonism extension.
+            
+            else: # Else, delete the Phonism extension.
 
                 # Create the delete url
                 extensions_api_url = endpoint + 'extensions/{0}'.format(ph_ext_dict['id'])
@@ -282,20 +285,21 @@ if __name__ == '__main__':
                 response = requests.delete(extensions_api_url, headers=headers)
                 deleted_extension = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='delete')
 
-                if True or verbose > 0:
+                if verbose > 0:
                     print("Deleted extension id #{0} from Phonism.".format(deleted_extension['id']))
 
-                # This user is deleted so we should count them for "start_after".
-                count_of_users -= 1
+                # The Phonism extension was deleted. We shouldn't use it in calculating the start_after value.
+                ph_extension_count -= 1
 
         # Start after the number of users processed 
-        start_after += count_of_users
-        print('', sep="", end="\n\n", flush=True)
+        start_after += ph_extension_count
 
+        # Fail Safe.
+        if start_after > 500000:
+            break
 
-    ## Loop through fs_user_list and do stuff depending on whether you find it in phonism_extension_data
+    ## Loop through fs_user_list and create the extension if it is not in the updated_phonism_extensions list.
     for fi, fs_user_dict in enumerate(fs_user_list):
-        # If not in the updated_phonism_extensions list, create it.
         if fs_user_dict['userid'] not in updated_phonism_extensions:
             # Create the insert url.
             extensions_api_url = endpoint + 'extensions'
