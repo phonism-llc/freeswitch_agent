@@ -316,7 +316,7 @@ if __name__ == '__main__':
             response = requests.post(extensions_api_url, data=post_data, headers=headers)
             created_extension = processRequestsResponse(response=response, request_url=extensions_api_url, request_verb='post')
 
-            if True or verbose > 0:
+            if verbose > 0:
                 print("Created extension \"{0}\" in Phonism.".format(created_extension['extension']))
 
 
