@@ -221,7 +221,7 @@ if __name__ == '__main__':
         ## Get Phonism extension data
         extensions_api_url = endpoint + 'extensions?tenant_id={0}&limit={1}&start_after={2}'.format(tenant_id, limit, start_after)
 
-        if True or verbose > 2:
+        if verbose > 2:
             print('extensions_api_url: ', extensions_api_url)
             print('limit:', limit)
             print('start_after:', start_after)
@@ -293,9 +293,10 @@ if __name__ == '__main__':
 
         # Start after the number of users processed 
         start_after += ph_extension_count
+        counter += 1
 
-        # Fail Safe.
-        if start_after > 500000:
+        # Fail Safe. 10 * 100000 = 1000000 extensions
+        if counter > 100000:
             break
 
     ## Loop through fs_user_list and create the extension if it is not in the updated_phonism_extensions list.
