@@ -1,3 +1,6 @@
+# never commit the phonism_freeswitch_agent.ini file
+phonism_freeswitch_agent.ini
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -89,6 +92,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+phonism_env/
+myenv/
 
 # Spyder project settings
 .spyderproject
